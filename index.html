@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#10233f">
   <meta name="description" content="A fast, private daily macro tracker for breakfast, lunch, and dinner.">
-  <title>Jessie's Fitness Journey</title>
+  <title>Macro Day Tracker</title>
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="style.css">
@@ -16,7 +16,7 @@
       <div class="brand-mark" aria-hidden="true">M</div>
       <div>
         <h1>Macro Day</h1>
-        <p>Meal Macro Tracking</p>
+        <p>Fast meal-by-meal macro tracking</p>
       </div>
     </div>
     <button id="dataButton" class="icon-button" type="button" aria-label="Open data and backup options" title="Data & backup">⋯</button>
@@ -37,6 +37,23 @@
       <span id="saveDot" class="save-dot"></span>
       <span id="saveStatus">Loading saved data…</span>
     </div>
+
+    <section class="weight-card" aria-labelledby="weightTitle">
+      <div>
+        <p class="eyebrow">Daily weigh-in</p>
+        <h2 id="weightTitle">Weight</h2>
+        <p id="weightChangeText" class="weight-change">No weight entered for this day</p>
+      </div>
+      <div class="weight-actions">
+        <label class="weight-input-wrap" for="weightInput">
+          <span class="visually-hidden">Weight in pounds</span>
+          <input id="weightInput" type="number" inputmode="decimal" min="1" max="1500" step="0.1" placeholder="—" aria-label="Weight in pounds">
+          <span class="weight-unit">lb</span>
+        </label>
+        <button id="saveWeightButton" class="primary-button compact-button" type="button">Save</button>
+        <button id="weightHistoryButton" class="text-button weight-trend-button" type="button">View trend</button>
+      </div>
+    </section>
 
     <section class="summary-card" aria-labelledby="todaySummaryTitle">
       <div class="section-heading">
@@ -211,10 +228,29 @@
     <div class="dialog-header">
       <div>
         <p class="eyebrow">Saved automatically</p>
-        <h2>History</h2>
+        <h2>History & weight trend</h2>
       </div>
       <button class="close-button" type="button" data-close-dialog="historyDialog" aria-label="Close">×</button>
     </div>
+
+    <section id="weightHistorySection" class="weight-history-section" hidden aria-labelledby="weightTrendTitle">
+      <div class="weight-history-heading">
+        <div>
+          <p class="eyebrow">Weight history</p>
+          <h3 id="weightTrendTitle">Recent trend</h3>
+        </div>
+        <span id="weightTrendRange" class="weight-trend-range"></span>
+      </div>
+      <div class="weight-stats">
+        <div><span>Latest</span><strong id="latestWeight">—</strong></div>
+        <div><span>7-day average</span><strong id="averageWeight">—</strong></div>
+        <div><span>Change</span><strong id="weightTrendChange">—</strong></div>
+      </div>
+      <div class="weight-chart-wrap">
+        <svg id="weightChart" class="weight-chart" viewBox="0 0 640 230" role="img" aria-label="Weight trend chart"></svg>
+      </div>
+    </section>
+
     <div id="historyList" class="history-list"></div>
   </dialog>
 

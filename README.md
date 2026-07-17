@@ -5,20 +5,22 @@ A simple mobile-first macro tracker organized into **Breakfast, Lunch, and Dinne
 ## What it does
 
 - Tracks calories, protein, carbohydrates, and fat for every food entry
+- Saves one optional body-weight entry for each date
+- Shows the latest weight, seven-day average, change, and a recent trend chart
 - Shows totals for each food, each meal, and the entire day
 - Uses only a food name plus protein, carbs, and fat; calories calculate automatically
 - Allows label calories to be entered when they differ from the macro calculation
 - Saves every change automatically in IndexedDB
 - Maintains a second recovery copy in localStorage
 - Supports downloadable JSON backups and restoration
-- Exports the complete history to CSV
+- Exports the complete macro and weight history to CSV
 - Remembers recent foods for one-tap reuse
 - Includes optional daily goals
 - Works offline after the first visit and can be installed as a web app
 
 ## Important data note
 
-The app stores data locally on the device and browser where it is used. IndexedDB plus the recovery copy protects against ordinary closing and reopening, but clearing browser data or losing the device can remove both local copies. Use **Data & backup → Download backup** periodically for a portable copy.
+The app stores macro and weight data locally on the device and browser where it is used. IndexedDB plus the recovery copy protects against ordinary closing and reopening, but clearing browser data or losing the device can remove both local copies. Use **Data & backup → Download backup** periodically for a portable copy.
 
 ## Publish with GitHub Pages
 

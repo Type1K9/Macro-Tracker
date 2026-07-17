@@ -26,7 +26,7 @@ async function initializeApp() {
     database = await openDatabase();
     await recoverFromMirrorIfNeeded();
     settings = (await getRecord(SETTINGS_STORE, SETTINGS_KEY)) || createDefaultSettings();
-    currentDay = (await getRecord(DAYS_STORE, currentDate)) || createEmptyDay(currentDate);
+    currentDay = normalizeDay((await getRecord(DAYS_STORE, currentDate)) || createEmptyDay(currentDate));
     await requestPersistentStorage();
     updateStorageProtectionMessage();
     renderAll();
@@ -36,7 +36,7 @@ async function initializeApp() {
     const backup = readRecoveryBackup();
     if (backup) {
       settings = backup.settings || createDefaultSettings();
-      currentDay = backup.days?.[currentDate] || createEmptyDay(currentDate);
+      currentDay = normalizeDay(backup.days?.[currentDate] || createEmptyDay(currentDate));
       renderAll();
       setSaveStatus("error", "Database unavailable — recovery copy loaded");
     } else {
@@ -53,13 +53,15 @@ async function initializeApp() {
 function cacheElements() {
   const ids = [
     "dataButton", "previousDay", "nextDay", "dateButton", "datePicker", "datePrimary", "dateSecondary",
-    "saveDot", "saveStatus", "goalsButton", "dailyCalories", "dailyProtein", "dailyCarbs", "dailyFat",
+    "saveDot", "saveStatus", "weightInput", "saveWeightButton", "weightHistoryButton", "weightChangeText",
+    "goalsButton", "dailyCalories", "dailyProtein", "dailyCarbs", "dailyFat",
     "caloriesGoalText", "proteinGoalText", "carbsGoalText", "fatGoalText", "caloriesProgress", "proteinProgress",
     "carbsProgress", "fatProgress", "breakfastTotals", "lunchTotals", "dinnerTotals", "breakfastList", "lunchList",
     "dinnerList", "historyButton", "foodDialog", "foodForm", "foodDialogTitle", "entryId",
     "mealSelect", "foodName", "proteinInput", "carbsInput", "fatInput", "calculatedCalories", "overrideCaloriesCheck",
     "calorieOverrideWrap", "caloriesInput", "recentFoodsArea", "recentFoods", "goalsDialog", "goalsForm", "goalCalories",
-    "goalProtein", "goalCarbs", "goalFat", "historyDialog", "historyList", "dataDialog", "storageProtectionTitle",
+    "goalProtein", "goalCarbs", "goalFat", "historyDialog", "historyList", "weightHistorySection", "weightTrendRange",
+    "latestWeight", "averageWeight", "weightTrendChange", "weightChart", "dataDialog", "storageProtectionTitle",
     "storageProtectionText", "exportJsonButton", "exportCsvButton", "importFileInput", "deleteAllButton", "toast"
   ];
   ids.forEach(id => { el[id] = document.getElementById(id); });
@@ -82,6 +84,15 @@ function bindEvents() {
     button.addEventListener("click", () => document.getElementById(button.dataset.closeDialog).close());
   });
 
+  el.weightInput.addEventListener("keydown", event => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      saveWeight();
+    }
+  });
+  el.saveWeightButton.addEventListener("click", saveWeight);
+  el.weightHistoryButton.addEventListener("click", () => openHistoryDialog(true));
+
   el.foodForm.addEventListener("submit", saveFoodEntry);
   [el.proteinInput, el.carbsInput, el.fatInput].forEach(input => input.addEventListener("input", updateCalculatedCalories));
   el.overrideCaloriesCheck.addEventListener("change", () => {
@@ -91,7 +102,7 @@ function bindEvents() {
 
   el.goalsButton.addEventListener("click", openGoalsDialog);
   el.goalsForm.addEventListener("submit", saveGoals);
-  el.historyButton.addEventListener("click", openHistoryDialog);
+  el.historyButton.addEventListener("click", () => openHistoryDialog(false));
   el.dataButton.addEventListener("click", () => {
     updateStorageProtectionMessage();
     el.dataDialog.showModal();
@@ -111,6 +122,7 @@ function bindEvents() {
 function createEmptyDay(date) {
   return {
     date,
+    weight: null,
     meals: { breakfast: [], lunch: [], dinner: [] },
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
@@ -207,7 +219,7 @@ async function saveSettings() {
 }
 
 async function updateRecoveryMirror(day = null, newSettings = null) {
-  const backup = readRecoveryBackup() || { version: 1, exportedAt: null, days: {}, settings: createDefaultSettings() };
+  const backup = readRecoveryBackup() || { version: 2, exportedAt: null, days: {}, settings: createDefaultSettings() };
   if (day) backup.days[day.date] = structuredClone(day);
   if (newSettings) backup.settings = structuredClone(newSettings);
   backup.exportedAt = new Date().toISOString();
@@ -258,6 +270,7 @@ async function updateStorageProtectionMessage() {
 
 function renderAll() {
   renderDate();
+  renderWeightCard();
   renderDailySummary();
   MEALS.forEach(renderMeal);
 }
@@ -274,6 +287,52 @@ function renderDate() {
   el.datePrimary.textContent = primary;
   el.dateSecondary.textContent = selected.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
   el.datePicker.value = currentDate;
+}
+
+async function renderWeightCard() {
+  const dateAtStart = currentDate;
+  const weight = positiveNumberOrNull(currentDay.weight);
+  el.weightInput.value = weight ? formatPlainNumber(weight, 1) : "";
+
+  if (!weight) {
+    el.weightChangeText.textContent = "No weight entered for this day";
+    return;
+  }
+
+  el.weightChangeText.textContent = "Saved for this day";
+  const days = await safelyGetAllDays();
+  if (currentDate !== dateAtStart) return;
+  const previous = days
+    .filter(day => day.date < dateAtStart && positiveNumberOrNull(day.weight))
+    .sort((a, b) => b.date.localeCompare(a.date))[0];
+
+  if (!previous) {
+    el.weightChangeText.textContent = "First saved weigh-in";
+    return;
+  }
+
+  const difference = round(weight - Number(previous.weight), 1);
+  if (difference === 0) {
+    el.weightChangeText.textContent = `No change from ${formatShortDate(previous.date)}`;
+  } else {
+    const direction = difference < 0 ? "down" : "up";
+    el.weightChangeText.textContent = `${formatPlainNumber(Math.abs(difference), 1)} lb ${direction} from ${formatShortDate(previous.date)}`;
+  }
+}
+
+async function saveWeight() {
+  const raw = el.weightInput.value.trim();
+  const weight = raw === "" ? null : positiveNumberOrNull(raw);
+  if (raw !== "" && (!weight || weight > 1500)) {
+    showToast("Enter a weight between 1 and 1,500 lb.");
+    el.weightInput.focus();
+    return;
+  }
+
+  currentDay.weight = weight ? round(weight, 1) : null;
+  await saveCurrentDay();
+  renderWeightCard();
+  showToast(weight ? "Weight saved." : "Weight removed.");
 }
 
 function renderDailySummary() {
@@ -490,24 +549,34 @@ async function saveGoals(event) {
   showToast("Goals saved.");
 }
 
-async function openHistoryDialog() {
+async function openHistoryDialog(focusWeight = false) {
   let days = [];
   try { days = await getAllRecords(DAYS_STORE); }
   catch { days = Object.values(readRecoveryBackup()?.days || {}); }
+  days = days.map(normalizeDay);
   days.sort((a, b) => b.date.localeCompare(a.date));
-  const nonEmptyDays = days.filter(day => countEntries(day) > 0);
+  renderWeightTrend(days);
+  const trackedDays = days.filter(day => countEntries(day) > 0 || positiveNumberOrNull(day.weight));
 
-  if (!nonEmptyDays.length) {
+  if (!trackedDays.length) {
     el.historyList.innerHTML = `<div class="history-empty">Your saved days will appear here.</div>`;
   } else {
-    el.historyList.innerHTML = nonEmptyDays.map(day => {
+    el.historyList.innerHTML = trackedDays.map(day => {
       const totals = calculateDayTotals(day);
+      const itemCount = countEntries(day);
+      const weight = positiveNumberOrNull(day.weight);
+      const macroMeta = itemCount
+        ? `P ${formatNumber(totals.protein,1)}g · C ${formatNumber(totals.carbs,1)}g · F ${formatNumber(totals.fat,1)}g · ${itemCount} item${itemCount === 1 ? "" : "s"}`
+        : "No meals logged";
       return `<button class="history-row" type="button" data-history-date="${day.date}">
         <span>
           <span class="history-date">${formatLongDate(day.date)}</span>
-          <span class="history-meta">P ${formatNumber(totals.protein,1)}g · C ${formatNumber(totals.carbs,1)}g · F ${formatNumber(totals.fat,1)}g · ${countEntries(day)} item${countEntries(day) === 1 ? "" : "s"}</span>
+          <span class="history-meta">${macroMeta}</span>
         </span>
-        <span class="history-calories">${formatNumber(totals.calories,0)} cal</span>
+        <span class="history-values">
+          ${weight ? `<span class="history-weight">${formatPlainNumber(weight,1)} lb</span>` : ""}
+          ${itemCount ? `<span class="history-calories">${formatNumber(totals.calories,0)} cal</span>` : ""}
+        </span>
       </button>`;
     }).join("");
     el.historyList.querySelectorAll("[data-history-date]").forEach(button => {
@@ -518,13 +587,72 @@ async function openHistoryDialog() {
     });
   }
   el.historyDialog.showModal();
+  if (focusWeight && !el.weightHistorySection.hidden) {
+    setTimeout(() => el.weightHistorySection.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+  }
 }
+
+function renderWeightTrend(days) {
+  const weightDays = days
+    .filter(day => positiveNumberOrNull(day.weight))
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-30);
+
+  el.weightHistorySection.hidden = weightDays.length === 0;
+  if (!weightDays.length) {
+    el.weightChart.innerHTML = "";
+    return;
+  }
+
+  const latest = weightDays[weightDays.length - 1];
+  const averageStartDate = shiftDateString(latest.date, -6);
+  const averagingDays = weightDays.filter(day => day.date >= averageStartDate && day.date <= latest.date);
+  const average = averagingDays.reduce((sum, day) => sum + Number(day.weight), 0) / averagingDays.length;
+  const change = round(Number(latest.weight) - Number(weightDays[0].weight), 1);
+
+  el.latestWeight.textContent = `${formatPlainNumber(latest.weight, 1)} lb`;
+  el.averageWeight.textContent = `${formatPlainNumber(average, 1)} lb`;
+  el.weightTrendChange.textContent = `${change > 0 ? "+" : ""}${formatPlainNumber(change, 1)} lb`;
+  el.weightTrendRange.textContent = weightDays.length === 1
+    ? formatShortDate(latest.date)
+    : `${formatShortDate(weightDays[0].date)} – ${formatShortDate(latest.date)}`;
+
+  const width = 640;
+  const height = 230;
+  const pad = { left: 46, right: 24, top: 24, bottom: 38 };
+  const values = weightDays.map(day => Number(day.weight));
+  let min = Math.min(...values);
+  let max = Math.max(...values);
+  const spread = Math.max(2, max - min);
+  min -= spread * 0.15;
+  max += spread * 0.15;
+
+  const xFor = index => weightDays.length === 1
+    ? (pad.left + width - pad.right) / 2
+    : pad.left + (index / (weightDays.length - 1)) * (width - pad.left - pad.right);
+  const yFor = value => pad.top + ((max - value) / (max - min)) * (height - pad.top - pad.bottom);
+  const points = weightDays.map((day, index) => `${xFor(index).toFixed(1)},${yFor(Number(day.weight)).toFixed(1)}`).join(" ");
+  const firstDate = escapeHtml(formatChartDate(weightDays[0].date));
+  const lastDate = escapeHtml(formatChartDate(latest.date));
+  const circles = weightDays.map((day, index) => `<circle cx="${xFor(index).toFixed(1)}" cy="${yFor(Number(day.weight)).toFixed(1)}" r="4"><title>${escapeHtml(formatLongDate(day.date))}: ${formatPlainNumber(day.weight,1)} lb</title></circle>`).join("");
+
+  el.weightChart.innerHTML = `
+    <line class="chart-grid-line" x1="${pad.left}" y1="${pad.top}" x2="${width - pad.right}" y2="${pad.top}"></line>
+    <line class="chart-grid-line" x1="${pad.left}" y1="${height - pad.bottom}" x2="${width - pad.right}" y2="${height - pad.bottom}"></line>
+    <text class="chart-axis-label" x="8" y="${pad.top + 4}">${formatPlainNumber(max,1)}</text>
+    <text class="chart-axis-label" x="8" y="${height - pad.bottom + 4}">${formatPlainNumber(min,1)}</text>
+    <polyline class="weight-line" points="${points}"></polyline>
+    <g class="weight-points">${circles}</g>
+    <text class="chart-date-label" x="${pad.left}" y="${height - 12}" text-anchor="start">${firstDate}</text>
+    <text class="chart-date-label" x="${width - pad.right}" y="${height - 12}" text-anchor="end">${lastDate}</text>`;
+}
+
 
 async function changeDate(date) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
   currentDate = date;
-  try { currentDay = (await getRecord(DAYS_STORE, currentDate)) || createEmptyDay(currentDate); }
-  catch { currentDay = readRecoveryBackup()?.days?.[currentDate] || createEmptyDay(currentDate); }
+  try { currentDay = normalizeDay((await getRecord(DAYS_STORE, currentDate)) || createEmptyDay(currentDate)); }
+  catch { currentDay = normalizeDay(readRecoveryBackup()?.days?.[currentDate] || createEmptyDay(currentDate)); }
   renderAll();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -535,7 +663,7 @@ async function exportJsonBackup() {
   const days = await safelyGetAllDays();
   const backup = {
     app: "Macro Day Tracker",
-    version: 1,
+    version: 2,
     exportedAt: new Date().toISOString(),
     settings: structuredClone(settings),
     days: Object.fromEntries(days.map(day => [day.date, day]))
@@ -546,10 +674,15 @@ async function exportJsonBackup() {
 
 async function exportCsvHistory() {
   const days = (await safelyGetAllDays()).sort((a, b) => a.date.localeCompare(b.date));
-  const rows = [["Date", "Meal", "Food", "Calories", "Protein (g)", "Carbs (g)", "Fat (g)"]];
-  days.forEach(day => MEALS.forEach(meal => (day.meals[meal] || []).forEach(food => {
-    rows.push([day.date, capitalize(meal), food.name, food.calories, food.protein, food.carbs, food.fat]);
-  })));
+  const rows = [["Date", "Weight (lb)", "Meal", "Food", "Calories", "Protein (g)", "Carbs (g)", "Fat (g)"]];
+  days.forEach(day => {
+    let addedFood = false;
+    MEALS.forEach(meal => (day.meals[meal] || []).forEach(food => {
+      addedFood = true;
+      rows.push([day.date, day.weight ?? "", capitalize(meal), food.name, food.calories, food.protein, food.carbs, food.fat]);
+    }));
+    if (!addedFood && positiveNumberOrNull(day.weight)) rows.push([day.date, day.weight, "", "", "", "", "", ""]);
+  });
   const csv = rows.map(row => row.map(csvCell).join(",")).join("\r\n");
   downloadFile(`macro-day-history-${getLocalDateString(new Date())}.csv`, csv, "text/csv;charset=utf-8");
   showToast("Spreadsheet downloaded.");
@@ -570,13 +703,13 @@ async function importJsonBackup(event) {
 
     const mergedDays = await getAllRecords(DAYS_STORE);
     const mergedBackup = {
-      version: 1,
+      version: 2,
       exportedAt: new Date().toISOString(),
       settings,
       days: Object.fromEntries(mergedDays.map(day => [day.date, day]))
     };
     localStorage.setItem(BACKUP_KEY, JSON.stringify(mergedBackup));
-    currentDay = (await getRecord(DAYS_STORE, currentDate)) || createEmptyDay(currentDate);
+    currentDay = normalizeDay((await getRecord(DAYS_STORE, currentDate)) || createEmptyDay(currentDate));
     renderAll();
     el.dataDialog.close();
     showToast("Backup restored.");
@@ -587,8 +720,8 @@ async function importJsonBackup(event) {
 }
 
 async function deleteAllData() {
-  if (!confirm("Delete every saved day, recent food, and goal? This cannot be undone unless you have downloaded a backup.")) return;
-  if (!confirm("Are you absolutely sure you want to erase all macro history?")) return;
+  if (!confirm("Delete every saved day, weight, recent food, and goal? This cannot be undone unless you have downloaded a backup.")) return;
+  if (!confirm("Are you absolutely sure you want to erase all macro and weight history?")) return;
   await clearStore(DAYS_STORE);
   await clearStore(SETTINGS_STORE);
   localStorage.removeItem(BACKUP_KEY);
@@ -611,6 +744,7 @@ function validateBackupShape(value) {
 
 function normalizeDay(day) {
   const normalized = createEmptyDay(day.date);
+  normalized.weight = positiveNumberOrNull(day.weight) ? round(Number(day.weight), 1) : null;
   MEALS.forEach(meal => {
     normalized.meals[meal] = Array.isArray(day.meals?.[meal])
       ? day.meals[meal].map(item => ({
@@ -702,6 +836,7 @@ function csvCell(value) { return `"${String(value ?? "").replaceAll('"', '""')}"
 function capitalize(value) { return value.charAt(0).toUpperCase() + value.slice(1); }
 function round(value, digits = 1) { const factor = 10 ** digits; return Math.round((Number(value) + Number.EPSILON) * factor) / factor; }
 function formatNumber(value, digits = 1) { return Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: digits }); }
+function formatPlainNumber(value, digits = 1) { return Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: digits }); }
 function numberOrNull(value) { const number = Number(value); return Number.isFinite(number) && number > 0 ? number : null; }
 function positiveNumberOrNull(value) { if (value === null || value === undefined || value === "") return null; const number = Number(value); return Number.isFinite(number) && number > 0 ? number : null; }
 function nonNegativeNumber(value) { const number = Number(value); return Number.isFinite(number) && number >= 0 ? number : null; }
@@ -717,3 +852,5 @@ function getLocalDateString(date) {
 function parseLocalDate(dateString) { const [year, month, day] = dateString.split("-").map(Number); return new Date(year, month - 1, day, 12); }
 function shiftDateString(dateString, amount) { const date = parseLocalDate(dateString); date.setDate(date.getDate() + amount); return getLocalDateString(date); }
 function formatLongDate(dateString) { return parseLocalDate(dateString).toLocaleDateString(undefined, { weekday: "short", month: "long", day: "numeric", year: "numeric" }); }
+function formatShortDate(dateString) { return parseLocalDate(dateString).toLocaleDateString(undefined, { month: "short", day: "numeric" }); }
+function formatChartDate(dateString) { return parseLocalDate(dateString).toLocaleDateString(undefined, { month: "numeric", day: "numeric" }); }
