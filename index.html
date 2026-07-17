@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#10233f">
+  <meta name="description" content="A fast, private daily macro tracker for breakfast, lunch, and dinner.">
+  <title>Macro Day Tracker</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="brand-wrap">
+      <div class="brand-mark" aria-hidden="true">M</div>
+      <div>
+        <h1>Macro Day</h1>
+        <p>Fast meal-by-meal macro tracking</p>
+      </div>
+    </div>
+    <button id="dataButton" class="icon-button" type="button" aria-label="Open data and backup options" title="Data & backup">⋯</button>
+  </header>
+
+  <main class="app-shell">
+    <section class="date-panel" aria-label="Choose tracking date">
+      <button id="previousDay" class="date-arrow" type="button" aria-label="Previous day">‹</button>
+      <button id="dateButton" class="date-button" type="button">
+        <span id="datePrimary">Today</span>
+        <span id="dateSecondary"></span>
+      </button>
+      <button id="nextDay" class="date-arrow" type="button" aria-label="Next day">›</button>
+      <input id="datePicker" class="visually-hidden" type="date" aria-label="Select date">
+    </section>
+
+    <div class="save-line" aria-live="polite">
+      <span id="saveDot" class="save-dot"></span>
+      <span id="saveStatus">Loading saved data…</span>
+    </div>
+
+    <section class="summary-card" aria-labelledby="todaySummaryTitle">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Daily total</p>
+          <h2 id="todaySummaryTitle">Today’s macros</h2>
+        </div>
+        <button id="goalsButton" class="text-button" type="button">Set goals</button>
+      </div>
+
+      <div class="summary-grid">
+        <article class="macro-summary calories-summary">
+          <span class="macro-label">Calories</span>
+          <strong id="dailyCalories">0</strong>
+          <span id="caloriesGoalText" class="macro-goal">No goal set</span>
+          <div class="progress-track"><span id="caloriesProgress" class="progress-fill"></span></div>
+        </article>
+        <article class="macro-summary">
+          <span class="macro-label">Protein</span>
+          <strong><span id="dailyProtein">0</span><small>g</small></strong>
+          <span id="proteinGoalText" class="macro-goal">No goal set</span>
+          <div class="progress-track"><span id="proteinProgress" class="progress-fill"></span></div>
+        </article>
+        <article class="macro-summary">
+          <span class="macro-label">Carbs</span>
+          <strong><span id="dailyCarbs">0</span><small>g</small></strong>
+          <span id="carbsGoalText" class="macro-goal">No goal set</span>
+          <div class="progress-track"><span id="carbsProgress" class="progress-fill"></span></div>
+        </article>
+        <article class="macro-summary">
+          <span class="macro-label">Fat</span>
+          <strong><span id="dailyFat">0</span><small>g</small></strong>
+          <span id="fatGoalText" class="macro-goal">No goal set</span>
+          <div class="progress-track"><span id="fatProgress" class="progress-fill"></span></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="meals-grid" aria-label="Meals">
+      <article class="meal-card" data-meal="breakfast">
+        <div class="meal-header">
+          <div>
+            <p class="eyebrow">Morning</p>
+            <h2>Breakfast</h2>
+          </div>
+          <button class="add-meal-button" type="button" data-add-meal="breakfast">+ Add</button>
+        </div>
+        <div id="breakfastTotals" class="meal-totals"></div>
+        <div id="breakfastList" class="food-list"></div>
+      </article>
+
+      <article class="meal-card" data-meal="lunch">
+        <div class="meal-header">
+          <div>
+            <p class="eyebrow">Midday</p>
+            <h2>Lunch</h2>
+          </div>
+          <button class="add-meal-button" type="button" data-add-meal="lunch">+ Add</button>
+        </div>
+        <div id="lunchTotals" class="meal-totals"></div>
+        <div id="lunchList" class="food-list"></div>
+      </article>
+
+      <article class="meal-card" data-meal="dinner">
+        <div class="meal-header">
+          <div>
+            <p class="eyebrow">Evening</p>
+            <h2>Dinner</h2>
+          </div>
+          <button class="add-meal-button" type="button" data-add-meal="dinner">+ Add</button>
+        </div>
+        <div id="dinnerTotals" class="meal-totals"></div>
+        <div id="dinnerList" class="food-list"></div>
+      </article>
+    </section>
+
+    <section class="history-shortcut">
+      <button id="historyButton" class="secondary-button" type="button">View full history</button>
+    </section>
+  </main>
+
+
+  <dialog id="foodDialog" class="app-dialog">
+    <form id="foodForm" method="dialog" novalidate>
+      <div class="dialog-header">
+        <div>
+          <p class="eyebrow">Food entry</p>
+          <h2 id="foodDialogTitle">Add food</h2>
+        </div>
+        <button class="close-button" type="button" data-close-dialog="foodDialog" aria-label="Close">×</button>
+      </div>
+
+      <input id="entryId" type="hidden">
+      <label class="field-label" for="mealSelect">Meal</label>
+      <select id="mealSelect" class="field-control">
+        <option value="breakfast">Breakfast</option>
+        <option value="lunch">Lunch</option>
+        <option value="dinner">Dinner</option>
+      </select>
+
+      <label class="field-label" for="foodName">Food name</label>
+      <input id="foodName" class="field-control" type="text" maxlength="80" placeholder="Chicken and rice" autocomplete="off" required>
+
+      <div id="recentFoodsArea" class="recent-area" hidden>
+        <span class="field-label">Recent foods</span>
+        <div id="recentFoods" class="recent-foods"></div>
+      </div>
+
+      <p class="form-helper">Enter the totals for the amount you ate.</p>
+      <div class="macro-entry-grid">
+        <label>
+          <span>Protein <small>(g)</small></span>
+          <input id="proteinInput" inputmode="decimal" type="number" min="0" max="1000" step="0.1" placeholder="0" required>
+        </label>
+        <label>
+          <span>Carbs <small>(g)</small></span>
+          <input id="carbsInput" inputmode="decimal" type="number" min="0" max="1000" step="0.1" placeholder="0" required>
+        </label>
+        <label>
+          <span>Fat <small>(g)</small></span>
+          <input id="fatInput" inputmode="decimal" type="number" min="0" max="1000" step="0.1" placeholder="0" required>
+        </label>
+      </div>
+
+      <div class="calorie-result">
+        <div>
+          <span>Calculated calories</span>
+          <strong id="calculatedCalories">0</strong>
+        </div>
+        <label class="check-line">
+          <input id="overrideCaloriesCheck" type="checkbox">
+          Use label calories instead
+        </label>
+      </div>
+
+      <div id="calorieOverrideWrap" hidden>
+        <label class="field-label" for="caloriesInput">Calories</label>
+        <input id="caloriesInput" class="field-control" inputmode="decimal" type="number" min="0" max="10000" step="1" placeholder="0">
+      </div>
+
+      <div class="dialog-actions">
+        <button class="secondary-button" type="button" data-close-dialog="foodDialog">Cancel</button>
+        <button class="primary-button" type="submit">Save food</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="goalsDialog" class="app-dialog">
+    <form id="goalsForm" method="dialog">
+      <div class="dialog-header">
+        <div>
+          <p class="eyebrow">Optional</p>
+          <h2>Daily goals</h2>
+        </div>
+        <button class="close-button" type="button" data-close-dialog="goalsDialog" aria-label="Close">×</button>
+      </div>
+      <p class="dialog-copy">Leave any goal blank if you do not want to track it.</p>
+      <div class="goal-grid">
+        <label><span>Calories</span><input id="goalCalories" type="number" min="0" step="1" placeholder="Not set"></label>
+        <label><span>Protein (g)</span><input id="goalProtein" type="number" min="0" step="1" placeholder="Not set"></label>
+        <label><span>Carbs (g)</span><input id="goalCarbs" type="number" min="0" step="1" placeholder="Not set"></label>
+        <label><span>Fat (g)</span><input id="goalFat" type="number" min="0" step="1" placeholder="Not set"></label>
+      </div>
+      <div class="dialog-actions">
+        <button class="secondary-button" type="button" data-close-dialog="goalsDialog">Cancel</button>
+        <button class="primary-button" type="submit">Save goals</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="historyDialog" class="app-dialog wide-dialog">
+    <div class="dialog-header">
+      <div>
+        <p class="eyebrow">Saved automatically</p>
+        <h2>History</h2>
+      </div>
+      <button class="close-button" type="button" data-close-dialog="historyDialog" aria-label="Close">×</button>
+    </div>
+    <div id="historyList" class="history-list"></div>
+  </dialog>
+
+  <dialog id="dataDialog" class="app-dialog">
+    <div class="dialog-header">
+      <div>
+        <p class="eyebrow">Your records</p>
+        <h2>Data & backup</h2>
+      </div>
+      <button class="close-button" type="button" data-close-dialog="dataDialog" aria-label="Close">×</button>
+    </div>
+    <div class="data-status-card">
+      <strong id="storageProtectionTitle">Checking storage…</strong>
+      <p id="storageProtectionText">Your entries are saved automatically.</p>
+    </div>
+    <div class="data-actions">
+      <button id="exportJsonButton" class="primary-button" type="button">Download backup</button>
+      <button id="exportCsvButton" class="secondary-button" type="button">Download spreadsheet</button>
+      <label class="secondary-button file-button">
+        Restore backup
+        <input id="importFileInput" type="file" accept="application/json,.json" hidden>
+      </label>
+    </div>
+    <p class="dialog-copy small-copy">The app keeps a primary database and a second recovery copy in this browser. A downloaded backup protects you if browser data is cleared or the device is replaced.</p>
+    <button id="deleteAllButton" class="danger-button" type="button">Delete all saved data</button>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="script.js"></script>
+</body>
+</html>

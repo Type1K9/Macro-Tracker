@@ -1,0 +1,17 @@
+{
+  "name": "Macro Day Tracker",
+  "short_name": "Macro Day",
+  "description": "Fast, private meal-by-meal macro tracking.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#fbf8f1",
+  "theme_color": "#10233f",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
