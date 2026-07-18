@@ -1,7 +1,7 @@
 {
   "name": "Macro Day Tracker",
   "short_name": "Macro Day",
-  "description": "Fast, private meal-by-meal macro and weight tracking.",
+  "description": "Fast, private tracking for calories, protein, carbs, fat, sugar, fiber, and weight.",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#fbf8f1",

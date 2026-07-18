@@ -239,7 +239,7 @@ h2 { margin: 0; color: var(--navy-900); font-size: 1.28rem; letter-spacing: -0.0
 .add-meal-button:hover { background: #fff3d6; }
 .meal-totals {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0,1fr));
+  grid-template-columns: repeat(3, minmax(0,1fr));
   gap: 6px;
   margin: 15px 0 12px;
 }
@@ -272,7 +272,8 @@ h2 { margin: 0; color: var(--navy-900); font-size: 1.28rem; letter-spacing: -0.0
 }
 .food-row-main { min-width: 0; }
 .food-name { margin: 0; overflow: hidden; color: var(--ink); font-size: 0.92rem; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
-.food-macros { margin: 4px 0 0; color: var(--muted); font-size: 0.74rem; }
+.food-macros { margin: 4px 0 0; color: var(--muted); font-size: 0.74rem; line-height: 1.45; }
+.food-secondary-macros { color: #738197; }
 .food-actions { display: flex; gap: 4px; }
 .food-action {
   border: 0;
@@ -447,12 +448,16 @@ h2 { margin: 0; color: var(--navy-900); font-size: 1.28rem; letter-spacing: -0.0
   .site-header { padding-left: max(32px, calc((100vw - 1180px) / 2)); padding-right: max(32px, calc((100vw - 1180px) / 2)); }
   .app-shell { padding-top: 28px; }
   .summary-card { padding: 24px; }
-  .summary-grid { grid-template-columns: repeat(4, minmax(0,1fr)); }
+  .summary-grid { grid-template-columns: repeat(3, minmax(0,1fr)); }
   .meal-card { padding: 20px; }
 }
 
 @media (min-width: 980px) {
   .meals-grid { grid-template-columns: repeat(3, minmax(0,1fr)); align-items: start; }
+}
+
+@media (min-width: 1100px) {
+  .summary-grid { grid-template-columns: repeat(6, minmax(0,1fr)); }
 }
 
 @media (max-width: 560px) {

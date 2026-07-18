@@ -25,7 +25,7 @@ async function initializeApp() {
   try {
     database = await openDatabase();
     await recoverFromMirrorIfNeeded();
-    settings = (await getRecord(SETTINGS_STORE, SETTINGS_KEY)) || createDefaultSettings();
+    settings = normalizeSettings((await getRecord(SETTINGS_STORE, SETTINGS_KEY)) || createDefaultSettings());
     currentDay = normalizeDay((await getRecord(DAYS_STORE, currentDate)) || createEmptyDay(currentDate));
     await requestPersistentStorage();
     updateStorageProtectionMessage();
@@ -35,7 +35,7 @@ async function initializeApp() {
     console.error(error);
     const backup = readRecoveryBackup();
     if (backup) {
-      settings = backup.settings || createDefaultSettings();
+      settings = normalizeSettings(backup.settings || createDefaultSettings());
       currentDay = normalizeDay(backup.days?.[currentDate] || createEmptyDay(currentDate));
       renderAll();
       setSaveStatus("error", "Database unavailable — recovery copy loaded");
@@ -54,13 +54,14 @@ function cacheElements() {
   const ids = [
     "dataButton", "previousDay", "nextDay", "dateButton", "datePicker", "datePrimary", "dateSecondary",
     "saveDot", "saveStatus", "weightInput", "saveWeightButton", "weightHistoryButton", "weightChangeText",
-    "goalsButton", "dailyCalories", "dailyProtein", "dailyCarbs", "dailyFat",
-    "caloriesGoalText", "proteinGoalText", "carbsGoalText", "fatGoalText", "caloriesProgress", "proteinProgress",
-    "carbsProgress", "fatProgress", "breakfastTotals", "lunchTotals", "dinnerTotals", "breakfastList", "lunchList",
+    "goalsButton", "dailyCalories", "dailyProtein", "dailyCarbs", "dailyFat", "dailySugar", "dailyFiber",
+    "caloriesGoalText", "proteinGoalText", "carbsGoalText", "fatGoalText", "sugarGoalText", "fiberGoalText",
+    "caloriesProgress", "proteinProgress", "carbsProgress", "fatProgress", "sugarProgress", "fiberProgress",
+    "breakfastTotals", "lunchTotals", "dinnerTotals", "breakfastList", "lunchList",
     "dinnerList", "historyButton", "foodDialog", "foodForm", "foodDialogTitle", "entryId",
-    "mealSelect", "foodName", "proteinInput", "carbsInput", "fatInput", "calculatedCalories", "overrideCaloriesCheck",
+    "mealSelect", "foodName", "proteinInput", "carbsInput", "fatInput", "sugarInput", "fiberInput", "calculatedCalories", "overrideCaloriesCheck",
     "calorieOverrideWrap", "caloriesInput", "recentFoodsArea", "recentFoods", "goalsDialog", "goalsForm", "goalCalories",
-    "goalProtein", "goalCarbs", "goalFat", "historyDialog", "historyList", "weightHistorySection", "weightTrendRange",
+    "goalProtein", "goalCarbs", "goalFat", "goalSugar", "goalFiber", "historyDialog", "historyList", "weightHistorySection", "weightTrendRange",
     "latestWeight", "averageWeight", "weightTrendChange", "weightChart", "dataDialog", "storageProtectionTitle",
     "storageProtectionText", "exportJsonButton", "exportCsvButton", "importFileInput", "deleteAllButton", "toast"
   ];
@@ -132,7 +133,7 @@ function createEmptyDay(date) {
 function createDefaultSettings() {
   return {
     id: SETTINGS_KEY,
-    goals: { calories: null, protein: null, carbs: null, fat: null },
+    goals: { calories: null, protein: null, carbs: null, fat: null, sugar: null, fiber: null },
     recentFoods: [],
     updatedAt: new Date().toISOString()
   };
@@ -219,7 +220,7 @@ async function saveSettings() {
 }
 
 async function updateRecoveryMirror(day = null, newSettings = null) {
-  const backup = readRecoveryBackup() || { version: 2, exportedAt: null, days: {}, settings: createDefaultSettings() };
+  const backup = readRecoveryBackup() || { version: 3, exportedAt: null, days: {}, settings: createDefaultSettings() };
   if (day) backup.days[day.date] = structuredClone(day);
   if (newSettings) backup.settings = structuredClone(newSettings);
   backup.exportedAt = new Date().toISOString();
@@ -341,11 +342,15 @@ function renderDailySummary() {
   el.dailyProtein.textContent = formatNumber(totals.protein, 1);
   el.dailyCarbs.textContent = formatNumber(totals.carbs, 1);
   el.dailyFat.textContent = formatNumber(totals.fat, 1);
+  el.dailySugar.textContent = formatNumber(totals.sugar, 1);
+  el.dailyFiber.textContent = formatNumber(totals.fiber, 1);
 
   renderGoal("calories", totals.calories, "caloriesGoalText", "caloriesProgress", "cal");
   renderGoal("protein", totals.protein, "proteinGoalText", "proteinProgress", "g");
   renderGoal("carbs", totals.carbs, "carbsGoalText", "carbsProgress", "g");
   renderGoal("fat", totals.fat, "fatGoalText", "fatProgress", "g");
+  renderGoal("sugar", totals.sugar, "sugarGoalText", "sugarProgress", "g");
+  renderGoal("fiber", totals.fiber, "fiberGoalText", "fiberProgress", "g");
 }
 
 function renderGoal(key, current, textId, progressId, unit) {
@@ -357,9 +362,13 @@ function renderGoal(key, current, textId, progressId, unit) {
   }
   const remaining = Math.max(0, goal - current);
   const over = Math.max(0, current - goal);
-  el[textId].textContent = over > 0
-    ? `${formatNumber(over, key === "calories" ? 0 : 1)} ${unit} over`
-    : `${formatNumber(remaining, key === "calories" ? 0 : 1)} ${unit} left`;
+  if (key === "fiber" && current >= goal) {
+    el[textId].textContent = "Goal reached";
+  } else {
+    el[textId].textContent = over > 0
+      ? `${formatNumber(over, key === "calories" ? 0 : 1)} ${unit} over`
+      : `${formatNumber(remaining, key === "calories" ? 0 : 1)} ${unit} left`;
+  }
   el[progressId].style.width = `${Math.min(100, (current / goal) * 100)}%`;
 }
 
@@ -370,7 +379,9 @@ function renderMeal(meal) {
     mealTotalMarkup("Cal", formatNumber(totals.calories, 0)),
     mealTotalMarkup("Protein", `${formatNumber(totals.protein, 1)}g`),
     mealTotalMarkup("Carbs", `${formatNumber(totals.carbs, 1)}g`),
-    mealTotalMarkup("Fat", `${formatNumber(totals.fat, 1)}g`)
+    mealTotalMarkup("Fat", `${formatNumber(totals.fat, 1)}g`),
+    mealTotalMarkup("Sugar", `${formatNumber(totals.sugar, 1)}g`),
+    mealTotalMarkup("Fiber", `${formatNumber(totals.fiber, 1)}g`)
   ].join("");
 
   if (!entries.length) {
@@ -382,7 +393,7 @@ function renderMeal(meal) {
     <div class="food-row">
       <div class="food-row-main">
         <p class="food-name">${escapeHtml(entry.name)}</p>
-        <p class="food-macros">${formatNumber(entry.calories, 0)} cal · P ${formatNumber(entry.protein, 1)}g · C ${formatNumber(entry.carbs, 1)}g · F ${formatNumber(entry.fat, 1)}g</p>
+        <p class="food-macros">${formatNumber(entry.calories, 0)} cal · P ${formatNumber(entry.protein, 1)}g · C ${formatNumber(entry.carbs, 1)}g · F ${formatNumber(entry.fat, 1)}g<br><span class="food-secondary-macros">Sugar ${formatNumber(entry.sugar, 1)}g · Fiber ${formatNumber(entry.fiber, 1)}g</span></p>
       </div>
       <div class="food-actions">
         <button class="food-action" type="button" data-edit-id="${entry.id}" data-edit-meal="${meal}" aria-label="Edit ${escapeHtml(entry.name)}">Edit</button>
@@ -412,6 +423,8 @@ function openFoodDialog(meal = "breakfast", entry = null) {
   el.proteinInput.value = entry ? entry.protein : "";
   el.carbsInput.value = entry ? entry.carbs : "";
   el.fatInput.value = entry ? entry.fat : "";
+  el.sugarInput.value = entry ? entry.sugar : "";
+  el.fiberInput.value = entry ? entry.fiber : "";
 
   if (entry) {
     const calculated = calculateCalories(entry.protein, entry.carbs, entry.fat);
@@ -445,6 +458,8 @@ function fillRecentFood(food) {
   el.proteinInput.value = food.protein;
   el.carbsInput.value = food.carbs;
   el.fatInput.value = food.fat;
+  el.sugarInput.value = food.sugar ?? 0;
+  el.fiberInput.value = food.fiber ?? 0;
   const calculated = calculateCalories(food.protein, food.carbs, food.fat);
   const differs = Math.abs(calculated - Number(food.calories)) >= 1;
   el.overrideCaloriesCheck.checked = differs;
@@ -459,12 +474,14 @@ async function saveFoodEntry(event) {
   const protein = nonNegativeNumber(el.proteinInput.value);
   const carbs = nonNegativeNumber(el.carbsInput.value);
   const fat = nonNegativeNumber(el.fatInput.value);
+  const sugar = optionalNonNegativeNumber(el.sugarInput.value);
+  const fiber = optionalNonNegativeNumber(el.fiberInput.value);
   const calories = el.overrideCaloriesCheck.checked
     ? nonNegativeNumber(el.caloriesInput.value)
     : calculateCalories(protein, carbs, fat);
 
   if (!name) return showToast("Enter a food name.");
-  if ([protein, carbs, fat, calories].some(value => value === null)) return showToast("Macro values must be zero or greater.");
+  if ([protein, carbs, fat, sugar, fiber, calories].some(value => value === null)) return showToast("Nutrient values must be zero or greater.");
 
   const destinationMeal = el.mealSelect.value;
   const existingId = el.entryId.value;
@@ -478,6 +495,8 @@ async function saveFoodEntry(event) {
     protein: round(protein, 1),
     carbs: round(carbs, 1),
     fat: round(fat, 1),
+    sugar: round(sugar, 1),
+    fiber: round(fiber, 1),
     createdAt: existingId
       ? currentDay.meals[existingMeal].find(item => item.id === existingId)?.createdAt || new Date().toISOString()
       : new Date().toISOString(),
@@ -519,12 +538,14 @@ function rememberRecentFood(entry) {
     calories: entry.calories,
     protein: entry.protein,
     carbs: entry.carbs,
-    fat: entry.fat
+    fat: entry.fat,
+    sugar: entry.sugar,
+    fiber: entry.fiber
   }, ...filtered].slice(0, 12);
 }
 
 function foodSignature(food) {
-  return `${String(food.name).trim().toLowerCase()}|${food.calories}|${food.protein}|${food.carbs}|${food.fat}`;
+  return `${String(food.name).trim().toLowerCase()}|${food.calories}|${food.protein}|${food.carbs}|${food.fat}|${food.sugar || 0}|${food.fiber || 0}`;
 }
 
 function openGoalsDialog() {
@@ -532,6 +553,8 @@ function openGoalsDialog() {
   el.goalProtein.value = settings.goals.protein ?? "";
   el.goalCarbs.value = settings.goals.carbs ?? "";
   el.goalFat.value = settings.goals.fat ?? "";
+  el.goalSugar.value = settings.goals.sugar ?? "";
+  el.goalFiber.value = settings.goals.fiber ?? "";
   el.goalsDialog.showModal();
 }
 
@@ -541,7 +564,9 @@ async function saveGoals(event) {
     calories: positiveNumberOrNull(el.goalCalories.value),
     protein: positiveNumberOrNull(el.goalProtein.value),
     carbs: positiveNumberOrNull(el.goalCarbs.value),
-    fat: positiveNumberOrNull(el.goalFat.value)
+    fat: positiveNumberOrNull(el.goalFat.value),
+    sugar: positiveNumberOrNull(el.goalSugar.value),
+    fiber: positiveNumberOrNull(el.goalFiber.value)
   };
   await saveSettings();
   renderDailySummary();
@@ -566,7 +591,7 @@ async function openHistoryDialog(focusWeight = false) {
       const itemCount = countEntries(day);
       const weight = positiveNumberOrNull(day.weight);
       const macroMeta = itemCount
-        ? `P ${formatNumber(totals.protein,1)}g · C ${formatNumber(totals.carbs,1)}g · F ${formatNumber(totals.fat,1)}g · ${itemCount} item${itemCount === 1 ? "" : "s"}`
+        ? `P ${formatNumber(totals.protein,1)}g · C ${formatNumber(totals.carbs,1)}g · F ${formatNumber(totals.fat,1)}g · Sugar ${formatNumber(totals.sugar,1)}g · Fiber ${formatNumber(totals.fiber,1)}g · ${itemCount} item${itemCount === 1 ? "" : "s"}`
         : "No meals logged";
       return `<button class="history-row" type="button" data-history-date="${day.date}">
         <span>
@@ -663,7 +688,7 @@ async function exportJsonBackup() {
   const days = await safelyGetAllDays();
   const backup = {
     app: "Macro Day Tracker",
-    version: 2,
+    version: 3,
     exportedAt: new Date().toISOString(),
     settings: structuredClone(settings),
     days: Object.fromEntries(days.map(day => [day.date, day]))
@@ -674,14 +699,14 @@ async function exportJsonBackup() {
 
 async function exportCsvHistory() {
   const days = (await safelyGetAllDays()).sort((a, b) => a.date.localeCompare(b.date));
-  const rows = [["Date", "Weight (lb)", "Meal", "Food", "Calories", "Protein (g)", "Carbs (g)", "Fat (g)"]];
+  const rows = [["Date", "Weight (lb)", "Meal", "Food", "Calories", "Protein (g)", "Carbs (g)", "Fat (g)", "Sugar (g)", "Fiber (g)"]];
   days.forEach(day => {
     let addedFood = false;
     MEALS.forEach(meal => (day.meals[meal] || []).forEach(food => {
       addedFood = true;
-      rows.push([day.date, day.weight ?? "", capitalize(meal), food.name, food.calories, food.protein, food.carbs, food.fat]);
+      rows.push([day.date, day.weight ?? "", capitalize(meal), food.name, food.calories, food.protein, food.carbs, food.fat, food.sugar || 0, food.fiber || 0]);
     }));
-    if (!addedFood && positiveNumberOrNull(day.weight)) rows.push([day.date, day.weight, "", "", "", "", "", ""]);
+    if (!addedFood && positiveNumberOrNull(day.weight)) rows.push([day.date, day.weight, "", "", "", "", "", "", "", ""]);
   });
   const csv = rows.map(row => row.map(csvCell).join(",")).join("\r\n");
   downloadFile(`macro-day-history-${getLocalDateString(new Date())}.csv`, csv, "text/csv;charset=utf-8");
@@ -703,7 +728,7 @@ async function importJsonBackup(event) {
 
     const mergedDays = await getAllRecords(DAYS_STORE);
     const mergedBackup = {
-      version: 2,
+      version: 3,
       exportedAt: new Date().toISOString(),
       settings,
       days: Object.fromEntries(mergedDays.map(day => [day.date, day]))
@@ -754,6 +779,8 @@ function normalizeDay(day) {
           protein: Math.max(0, Number(item.protein) || 0),
           carbs: Math.max(0, Number(item.carbs) || 0),
           fat: Math.max(0, Number(item.fat) || 0),
+          sugar: Math.max(0, Number(item.sugar) || 0),
+          fiber: Math.max(0, Number(item.fiber) || 0),
           createdAt: item.createdAt || new Date().toISOString(),
           updatedAt: item.updatedAt || new Date().toISOString()
         }))
@@ -772,7 +799,9 @@ function normalizeSettings(value) {
       calories: positiveNumberOrNull(value.goals?.calories),
       protein: positiveNumberOrNull(value.goals?.protein),
       carbs: positiveNumberOrNull(value.goals?.carbs),
-      fat: positiveNumberOrNull(value.goals?.fat)
+      fat: positiveNumberOrNull(value.goals?.fat),
+      sugar: positiveNumberOrNull(value.goals?.sugar),
+      fiber: positiveNumberOrNull(value.goals?.fiber)
     },
     recentFoods: Array.isArray(value.recentFoods)
       ? value.recentFoods.slice(0, 12).map(food => ({
@@ -780,7 +809,9 @@ function normalizeSettings(value) {
           calories: Math.max(0, Number(food.calories) || 0),
           protein: Math.max(0, Number(food.protein) || 0),
           carbs: Math.max(0, Number(food.carbs) || 0),
-          fat: Math.max(0, Number(food.fat) || 0)
+          fat: Math.max(0, Number(food.fat) || 0),
+          sugar: Math.max(0, Number(food.sugar) || 0),
+          fiber: Math.max(0, Number(food.fiber) || 0)
         }))
       : defaults.recentFoods,
     updatedAt: value.updatedAt || new Date().toISOString()
@@ -796,12 +827,14 @@ function calculateEntriesTotals(entries) {
     calories: totals.calories + (Number(entry.calories) || 0),
     protein: totals.protein + (Number(entry.protein) || 0),
     carbs: totals.carbs + (Number(entry.carbs) || 0),
-    fat: totals.fat + (Number(entry.fat) || 0)
+    fat: totals.fat + (Number(entry.fat) || 0),
+    sugar: totals.sugar + (Number(entry.sugar) || 0),
+    fiber: totals.fiber + (Number(entry.fiber) || 0)
   }), emptyTotals());
 }
 
-function emptyTotals() { return { calories: 0, protein: 0, carbs: 0, fat: 0 }; }
-function addTotals(a, b) { return { calories: a.calories + b.calories, protein: a.protein + b.protein, carbs: a.carbs + b.carbs, fat: a.fat + b.fat }; }
+function emptyTotals() { return { calories: 0, protein: 0, carbs: 0, fat: 0, sugar: 0, fiber: 0 }; }
+function addTotals(a, b) { return { calories: a.calories + b.calories, protein: a.protein + b.protein, carbs: a.carbs + b.carbs, fat: a.fat + b.fat, sugar: a.sugar + b.sugar, fiber: a.fiber + b.fiber }; }
 function countEntries(day) { return MEALS.reduce((count, meal) => count + (day.meals?.[meal]?.length || 0), 0); }
 function calculateCalories(protein, carbs, fat) { return round((Number(protein) || 0) * 4 + (Number(carbs) || 0) * 4 + (Number(fat) || 0) * 9, 0); }
 function calculateCaloriesFromInputs() { return calculateCalories(el.proteinInput.value, el.carbsInput.value, el.fatInput.value); }
@@ -840,6 +873,7 @@ function formatPlainNumber(value, digits = 1) { return Number(value || 0).toLoca
 function numberOrNull(value) { const number = Number(value); return Number.isFinite(number) && number > 0 ? number : null; }
 function positiveNumberOrNull(value) { if (value === null || value === undefined || value === "") return null; const number = Number(value); return Number.isFinite(number) && number > 0 ? number : null; }
 function nonNegativeNumber(value) { const number = Number(value); return Number.isFinite(number) && number >= 0 ? number : null; }
+function optionalNonNegativeNumber(value) { return value === "" ? 0 : nonNegativeNumber(value); }
 function makeId() { return crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`; }
 function escapeHtml(value) { return String(value).replace(/[&<>'"]/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]); }
 

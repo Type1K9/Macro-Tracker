@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#10233f">
-  <meta name="description" content="A fast, private daily macro tracker for breakfast, lunch, and dinner.">
+  <meta name="description" content="A fast, private daily macro tracker for calories, protein, carbs, fat, sugar, fiber, and weight.">
   <title>Macro Day Tracker</title>
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
@@ -88,6 +88,18 @@
           <strong><span id="dailyFat">0</span><small>g</small></strong>
           <span id="fatGoalText" class="macro-goal">No goal set</span>
           <div class="progress-track"><span id="fatProgress" class="progress-fill"></span></div>
+        </article>
+        <article class="macro-summary">
+          <span class="macro-label">Sugar</span>
+          <strong><span id="dailySugar">0</span><small>g</small></strong>
+          <span id="sugarGoalText" class="macro-goal">No goal set</span>
+          <div class="progress-track"><span id="sugarProgress" class="progress-fill"></span></div>
+        </article>
+        <article class="macro-summary">
+          <span class="macro-label">Fiber</span>
+          <strong><span id="dailyFiber">0</span><small>g</small></strong>
+          <span id="fiberGoalText" class="macro-goal">No goal set</span>
+          <div class="progress-track"><span id="fiberProgress" class="progress-fill"></span></div>
         </article>
       </div>
     </section>
@@ -176,6 +188,14 @@
           <span>Fat <small>(g)</small></span>
           <input id="fatInput" inputmode="decimal" type="number" min="0" max="1000" step="0.1" placeholder="0" required>
         </label>
+        <label>
+          <span>Sugar <small>(g)</small></span>
+          <input id="sugarInput" inputmode="decimal" type="number" min="0" max="1000" step="0.1" placeholder="0">
+        </label>
+        <label>
+          <span>Fiber <small>(g)</small></span>
+          <input id="fiberInput" inputmode="decimal" type="number" min="0" max="1000" step="0.1" placeholder="0">
+        </label>
       </div>
 
       <div class="calorie-result">
@@ -216,6 +236,8 @@
         <label><span>Protein (g)</span><input id="goalProtein" type="number" min="0" step="1" placeholder="Not set"></label>
         <label><span>Carbs (g)</span><input id="goalCarbs" type="number" min="0" step="1" placeholder="Not set"></label>
         <label><span>Fat (g)</span><input id="goalFat" type="number" min="0" step="1" placeholder="Not set"></label>
+        <label><span>Sugar limit (g)</span><input id="goalSugar" type="number" min="0" step="1" placeholder="Not set"></label>
+        <label><span>Fiber target (g)</span><input id="goalFiber" type="number" min="0" step="1" placeholder="Not set"></label>
       </div>
       <div class="dialog-actions">
         <button class="secondary-button" type="button" data-close-dialog="goalsDialog">Cancel</button>
